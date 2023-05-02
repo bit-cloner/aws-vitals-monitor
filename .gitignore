@@ -13,6 +13,7 @@
 !*.go
 !go.sum
 !go.mod
+!healthcheck.gif
 # add more files as needed above this line
 
 !README.md
