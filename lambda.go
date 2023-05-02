@@ -62,7 +62,7 @@ func outdatedFunctionRuntimeCheck(lambdaClient *lambda.Lambda, functionArn strin
 	}
 
 	for _, outdatedRuntime := range outdatedRuntimes {
-		if *function.Runtime == outdatedRuntime {
+		if function.Runtime != nil && *function.Runtime == outdatedRuntime {
 			fmt.Printf("\nOutdated runtime detected for function %s: %s\n", *function.FunctionName, *function.Runtime)
 		}
 	}

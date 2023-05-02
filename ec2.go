@@ -189,12 +189,14 @@ func performEC2Checks(svc *ec2.EC2) {
 	onDemandCount := 0
 	spotCount := 0
 	instanceTypeCounts := make(map[string]int)
+	instances := make([]*ec2.Instance, 0)
 
 	// Counting On-Demand and Spot instances
 	err := svc.DescribeInstancesPages(input,
 		func(page *ec2.DescribeInstancesOutput, lastPage bool) bool {
 			for _, reservation := range page.Reservations {
 				for _, instance := range reservation.Instances {
+					instances = append(instances, instance)
 					if instance.InstanceLifecycle != nil && *instance.InstanceLifecycle == "spot" {
 						spotCount++
 					} else {
@@ -211,7 +213,8 @@ func performEC2Checks(svc *ec2.EC2) {
 		fmt.Println("Error describing instances:", err)
 		return
 	}
-
+	// check for imdv1 instances
+	checkForIMDv1Instances(instances)
 	// Counting Reserved instances
 	reservedInput := &ec2.DescribeReservedInstancesInput{
 		Filters: []*ec2.Filter{
@@ -238,6 +241,13 @@ func performEC2Checks(svc *ec2.EC2) {
 			years,
 		)
 	}
+	// Calculate On-Demand and Spot instances percentages
+	onDemandPercentage := float64(onDemandCount) / float64(onDemandCount+spotCount) * 100
+	spotPercentage := float64(spotCount) / float64(onDemandCount+spotCount) * 100
+
+	// Print On-Demand and Spot instances percentages
+	fmt.Printf("\nOn-Demand Instances: %d (%.2f%%)\n", onDemandCount, onDemandPercentage)
+	fmt.Printf("Spot Instances: %d (%.2f%%)\n", spotCount, spotPercentage)
 
 	totalInstances := onDemandCount + spotCount
 	instancePercentages := make([]InstanceTypePercentage, 0, len(instanceTypeCounts))
@@ -269,4 +279,30 @@ func performEC2Checks(svc *ec2.EC2) {
 		fmt.Printf("Instace Type: %-20s: %s (%7.1f%%)\n\n", instancePercentage.InstanceType, bar, instancePercentage.Percentage)
 	}
 	fmt.Println("=========================================")
+}
+
+func checkForIMDv1Instances(instances []*ec2.Instance) {
+	fmt.Printf("\nChecking %d instances for (IMDv1)\n", len(instances))
+	imdv1Instances := make([]*ec2.Instance, 0)
+	for _, instance := range instances {
+		imdv1Instance := false
+		if instance.MetadataOptions != nil {
+			httpEndpointEnabled := instance.MetadataOptions.HttpEndpoint != nil && *instance.MetadataOptions.HttpEndpoint == "enabled"
+			httpTokensOptional := instance.MetadataOptions.HttpTokens != nil && *instance.MetadataOptions.HttpTokens == "optional"
+
+			imdv1Instance = httpEndpointEnabled && httpTokensOptional
+		}
+		if imdv1Instance {
+			imdv1Instances = append(imdv1Instances, instance)
+		}
+	}
+
+	if len(imdv1Instances) > 0 {
+		fmt.Printf("Found %d instances using instance metadata version 1 (IMDv1):\n", len(imdv1Instances))
+		for _, instance := range imdv1Instances {
+			fmt.Printf("- Instance ID: %s\n", *instance.InstanceId)
+		}
+	} else {
+		fmt.Println("No instances found using instance metadata version 1 (IMDv1).")
+	}
 }

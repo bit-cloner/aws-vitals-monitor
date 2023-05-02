@@ -8,12 +8,12 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/servicequotas"
 	"github.com/aws/aws-sdk-go/service/sts"
 )
 
@@ -60,9 +60,15 @@ func main() {
 		Message: "Do you want to run EC2 checks?",
 	}
 
-	shouldRunServiceQuotaChecks := false
-	serviceQuotaPrompt := &survey.Confirm{
-		Message: "Do you want to run Service Quota checks?",
+	shouldRunDynamoDBChecks := false
+	dynamoDBPrompt := &survey.Confirm{
+		Message: "Do you want to run DynamoDB checks?",
+	}
+
+	// Ask the user if they want to run s3 checks
+	shouldRunS3Checks := false
+	s3prompt := &survey.Confirm{
+		Message: "Do you want to run S3 checks?",
 	}
 
 	// Create a new session with the AWS SDK
@@ -79,7 +85,7 @@ func main() {
 	rdsClient := rds.New(sess)
 	iamSvc := iam.New(sess)
 	stsSvc := sts.New(sess)
-	serviceQuotasSvc := servicequotas.New(sess)
+	dynamoDBSvc := dynamodb.New(sess)
 	// Call printAccountInfo function
 	printAccountInfo(iamSvc, stsSvc, selectedRegion)
 
@@ -157,12 +163,6 @@ func main() {
 	subnetInfoList := extractSubnetInfo(subnets)
 	checkSubnetOverlaps(subnetInfoList)
 
-	// Get all the buckets in the region
-	bucketnames, err := getAllBucketNames(S3svc)
-	if err != nil {
-		fmt.Println("Failed to get buckets:", err)
-	}
-	getPercentageStorageclasses(S3svc, bucketnames)
 	//check for orphaned volumes
 	orphanedVolumes, err := findOrphanedEBSVolumes(ec2Svc)
 	if err != nil {
@@ -229,19 +229,33 @@ func main() {
 
 	if shouldRunEC2Checks {
 		performEC2Checks(ec2Svc)
-	} else {
-		os.Exit(0)
 	}
-	err = survey.AskOne(serviceQuotaPrompt, &shouldRunServiceQuotaChecks)
+	// ask user if they want to run s3 checks using survey
+	err = survey.AskOne(s3prompt, &shouldRunS3Checks)
 	if err != nil {
 		fmt.Println("Error with survey:", err)
 		return
 	}
+	if shouldRunS3Checks {
+		// Get all the buckets in the region
+		bucketnames, err := getAllBucketNames(S3svc)
+		if err != nil {
+			fmt.Println("Failed to get buckets:", err)
+		}
+		getPercentageStorageclasses(S3svc, bucketnames)
+	}
 
-	if shouldRunServiceQuotaChecks {
-		performServiceQuotaChecks(serviceQuotasSvc)
-	} else {
-		os.Exit(0)
+	err = survey.AskOne(dynamoDBPrompt, &shouldRunDynamoDBChecks)
+	if err != nil {
+		fmt.Println("Error with survey:", err)
+		return
+	}
+	if shouldRunDynamoDBChecks {
+		err = printdynamoTableStats(dynamoDBSvc)
+		if err != nil {
+			fmt.Println("Error with DynamoDB checks:", err)
+			return
+		}
 	}
 
 }
