@@ -7,9 +7,11 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/mikioh/ipaddr"
 )
@@ -190,13 +192,16 @@ func performEC2Checks(svc *ec2.EC2) {
 	spotCount := 0
 	instanceTypeCounts := make(map[string]int)
 	instances := make([]*ec2.Instance, 0)
-
+	runningInstances := make([]*ec2.Instance, 0)
 	// Counting On-Demand and Spot instances
 	err := svc.DescribeInstancesPages(input,
 		func(page *ec2.DescribeInstancesOutput, lastPage bool) bool {
 			for _, reservation := range page.Reservations {
 				for _, instance := range reservation.Instances {
 					instances = append(instances, instance)
+					if *instance.State.Name == "running" {
+						runningInstances = append(runningInstances, instance)
+					}
 					if instance.InstanceLifecycle != nil && *instance.InstanceLifecycle == "spot" {
 						spotCount++
 					} else {
@@ -215,6 +220,10 @@ func performEC2Checks(svc *ec2.EC2) {
 	}
 	// check for imdv1 instances
 	checkForIMDv1Instances(instances)
+	// check for underutilized instances
+	cpuThreshold := 20.0
+	timeframe := 72 * time.Hour
+	displayUnderutilizedInstances(runningInstances, cpuThreshold, timeframe)
 	// Counting Reserved instances
 	reservedInput := &ec2.DescribeReservedInstancesInput{
 		Filters: []*ec2.Filter{
@@ -304,5 +313,95 @@ func checkForIMDv1Instances(instances []*ec2.Instance) {
 		}
 	} else {
 		fmt.Println("No instances found using instance metadata version 1 (IMDv1).")
+	}
+}
+
+func getInstanceAverageCPU(instance *ec2.Instance, timeframe time.Duration) (float64, error) {
+	cwSess := session.Must(session.NewSessionWithOptions(session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}))
+	svc := cloudwatch.New(cwSess)
+	endTime := time.Now()
+	startTime := endTime.Add(-timeframe)
+
+	// Check if the instance was started within the specified time frame
+	if instance.LaunchTime.After(startTime) {
+		return 0, fmt.Errorf("instance %s was started within the specified time period", *instance.InstanceId)
+	}
+
+	input := &cloudwatch.GetMetricStatisticsInput{
+		Namespace:  aws.String("AWS/EC2"),
+		MetricName: aws.String("CPUUtilization"),
+		Dimensions: []*cloudwatch.Dimension{
+			{
+				Name:  aws.String("InstanceId"),
+				Value: instance.InstanceId,
+			},
+		},
+		StartTime: &startTime,
+		EndTime:   &endTime,
+		Period:    aws.Int64(3600),
+		Statistics: []*string{
+			aws.String(cloudwatch.StatisticAverage),
+		},
+	}
+
+	output, err := svc.GetMetricStatistics(input)
+	if err != nil {
+		return 0, err
+	}
+
+	total := 0.0
+	count := 0.0
+	for _, datapoint := range output.Datapoints {
+		total += *datapoint.Average
+		count++
+	}
+
+	if count == 0 {
+		return 0, fmt.Errorf("no datapoints found for instance %s", *instance.InstanceId)
+	}
+
+	average := total / count
+	return average, nil
+}
+
+func displayUnderutilizedInstances(runningInstances []*ec2.Instance, cpuThreshold float64, timeframe time.Duration) {
+	results := make(chan *ec2.Instance, len(runningInstances))
+	cpuUsages := make(chan float64, len(runningInstances))
+	concurrencyLimit := 10
+	sem := make(chan bool, concurrencyLimit)
+
+	for _, instance := range runningInstances {
+		sem <- true
+		go func(instance *ec2.Instance) {
+			defer func() { <-sem }()
+			averageCPU, err := getInstanceAverageCPU(instance, timeframe)
+			if err != nil {
+				if strings.Contains(err.Error(), "instance was started within the specified time period") {
+					fmt.Printf("Skipping instance %s: %s\n", *instance.InstanceId, err)
+				} else {
+					fmt.Printf("Error getting average CPU for instance %s: %s\n", *instance.InstanceId, err)
+				}
+				return
+			}
+
+			if averageCPU < cpuThreshold {
+				results <- instance
+				cpuUsages <- averageCPU
+			}
+		}(instance)
+	}
+
+	for i := 0; i < cap(sem); i++ {
+		sem <- true
+	}
+
+	close(results)
+	close(cpuUsages)
+
+	for instance := range results {
+		averageCPU := <-cpuUsages
+		fmt.Printf("Instance %s is underutilized (Average CPU usage: %.2f%%, Threshold: %.2f%%)\n", *instance.InstanceId, averageCPU, cpuThreshold)
 	}
 }

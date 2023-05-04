@@ -88,4 +88,3 @@ Make sure AWS credentials are available in the current terminal . for ex:
 export AWS_ACCESS_KEY_ID="your_aws_access_key" && export AWS_SECRET_ACCESS_KEY="your_aws_secret_key" && export AWS_SESSION_TOKEN="your_aws_session_token"
 
 ```
-Provide a brief example or instructions on how to use the tool. Include examples of command-line usage and any required input files or parameters.
