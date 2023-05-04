@@ -70,8 +70,12 @@ Now you can run the `hca` command from any directory on your Linux system.
 
 ### Windows
 
-1. Download the `hca-windows-amd64.exe` binary from the [releases](https://github.com/yourusername/project-name/releases) page.
-2. Rename the binary to `hca.exe` for ease of use.
+1. Download the `hca-windows-amd64.zip` binary from the [releases](https://github.com/yourusername/project-name/releases) page.
+2. Unzip the downloaded file to a directory. You can use the Expand-Archive cmdlet in PowerShell to unzip the file: 
+  Rename the binary to `hca.exe` for ease of use.
+  ```
+  Expand-Archive -Path .\hca-windows-amd64.zip -DestinationPath C:\path\to\hca\directory
+  ```
 3. Move the binary to a directory included in your `PATH` environment variable or add the binary's location to your `PATH`.
 ```powershell
 Move-Item .\hca.exe C:\path\to\directory\in\PATH
@@ -82,6 +86,10 @@ $env:Path += ";C:\path\to\hca\directory"
 ## Usage
 ```
 ./hca
+```
+or
+```
+hca.exe
 ```
 Make sure AWS credentials are available in the current terminal . for ex: 
 ```
