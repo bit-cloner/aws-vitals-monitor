@@ -1,10 +1,10 @@
 &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;![alt text](healthcheck.gif "HCA")
-# AWS health checks
-HCA- Health  checks for AWS
+# AWS Vitals Monitor
+AVM - AWS vitals Monitor
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-AWS Health checks is a tool designed to aid CREs in gaining a deeper understanding of an AWS account. It simplifies the task of identifying key characteristics of AWS services being used in an account.
+AWS Vitals Monitor is a tool designed to streamline the process of analyzing and understanding the usage patterns and health of various AWS services within your account. This tool provides a user-friendly interface from the terminal for obtaining key insights and metrics associated with your deployed AWS resources. By simplifying the identification of essential service characteristics, AWS Vitals Monitor enables users to optimize their infrastructure, improve performance, and reduce costs. AWS Vitals Monitor is a solution for gaining a holistic view of your AWS environment and ensuring the smooth operation of your cloud-based services.
 
 ## Table of Contents
 
@@ -23,11 +23,11 @@ AWS Health checks is a tool designed to aid CREs in gaining a deeper understandi
 
 ## Installation
 
-Pre-compiled binaries are available for Windows, macOS, and Linux systems in the [releases](https://github.com/doitintl/aws-health-checks/releases) section. Download the appropriate binary for your platform.
+Pre-compiled binaries are available for Windows, macOS, and Linux systems in the [releases](https://github.com/bit-cloner/aws-vitals-monitor/releases) section. Download the appropriate binary for your platform.
 
 ### macOS
 
-1. Download the `hca-darwin-amd64` binary from the [releases](https://github.com/yourusername/project-name/releases) page.
+1. Download the `hca-darwin-amd64` binary from the [releases](https://github.com/bit-cloner/aws-vitals-monitor/releases) page.
 ```
 curl -L -o hca-darwin-amd64.tar.gz https://github.com/doitintl/aws-health-checks/releases/download/0.2/hca-darwin-amd64.tar.gz
 ```
