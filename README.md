@@ -104,3 +104,6 @@ Make sure AWS credentials are available in the current terminal . for ex:
 export AWS_ACCESS_KEY_ID="your_aws_access_key" && export AWS_SECRET_ACCESS_KEY="your_aws_secret_key" && export AWS_SESSION_TOKEN="your_aws_session_token"
 
 ```
+
+<h3 align="left">Support:</h3>
+<p><a href="https://www.buymeacoffee.com/welldone"> <img align="left" src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="50" width="210" alt="welldone" /></a></p><br><br>
