@@ -2,8 +2,11 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"sort"
+	"strconv"
+	"time"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/aws/aws-sdk-go/aws"
@@ -54,10 +57,25 @@ func main() {
 		return
 	}
 	fmt.Println("Selected region:", selectedRegion)
+	shouldRunTrustedAdvisorChecks := false
+	trustedAdvisorPrompt := &survey.Confirm{
+		Message: "Do you want to run Trusted Advisor checks?",
+	}
 
 	shouldRunEC2Checks := false
 	ec2prompt := &survey.Confirm{
 		Message: "Do you want to run EC2 checks?",
+	}
+	cpuThresholdPrompt := &survey.Select{
+		Message: "Enter a CPU threshold (default 20%):",
+		Options: []string{"20", "30", "40", "50"},
+		Default: "20",
+	}
+
+	timeframePrompt := &survey.Select{
+		Message: "Enter a timeframe (default 3 days):",
+		Options: []string{"1", "3", "7", "14"},
+		Default: "3",
 	}
 
 	shouldRunDynamoDBChecks := false
@@ -96,16 +114,30 @@ func main() {
 	var foundPublicSnapshot bool
 	counter := 0
 
-	// loop over snapshot ids--- Checking only 100 snapshots as processing 1000s of snapshots array is creating a panic error-- to be fixed later
-	for i := 0; i < len(snapshotIds) && i < 100; i++ {
+	if len(snapshotIds) > 100 {
+		fmt.Println("There are more than 100 snapshots in this region. 100 random snapshots will be checked.")
+
+		// Seed the random number generator
+		rand.Seed(time.Now().UnixNano())
+
+		// Shuffle the snapshotIds slice
+		rand.Shuffle(len(snapshotIds), func(i, j int) {
+			snapshotIds[i], snapshotIds[j] = snapshotIds[j], snapshotIds[i]
+		})
+
+		// Now just take the first 100
+		snapshotIds = snapshotIds[:100]
+	}
+
+	for _, snapshotId := range snapshotIds {
 		counter++
 		fmt.Printf("\r #### Analyzed number of snapshots: %d ####", counter)
-		foundPublicSnapshot = checkSnapshot(snapshotIds[i], selectedRegion)
+		foundPublicSnapshot = checkSnapshot(snapshotId, selectedRegion)
 	}
+
 	if !foundPublicSnapshot {
 		fmt.Println("\nNo snapshots were found that are publicly shared: ✅")
 	}
-
 	groups, err := getSecurityGroups(selectedRegion)
 	if err != nil {
 		fmt.Printf("Error describing security groups in %s: %v\n", selectedRegion, err)
@@ -208,16 +240,26 @@ func main() {
 	}
 	checkRDSInstanceAttributes(rdsInstances)
 
-	// get Trusted Advisor checks-- available only on higher support plans. region must be us-east-1
-	fmt.Println("Getting Trusted Advisor checks... (this may take a few minutes) \n")
-	checkInfos, err := getTrustedAdvisorCheckIds()
+	// Ask user if they want to run Trusted Advisor checks using survey
+
+	err = survey.AskOne(trustedAdvisorPrompt, &shouldRunTrustedAdvisorChecks)
 	if err != nil {
-		fmt.Println("Failed to get Trusted Advisor check IDs:", err)
+		fmt.Println("Error with survey:", err)
+		return
 	}
-	fmt.Println("Printing Trusted Advisor check results... \n")
-	getCheckResults(checkInfos)
-	if err != nil {
-		fmt.Println("Failed to get Trusted Advisor check results:", err)
+	if shouldRunTrustedAdvisorChecks {
+		// get Trusted Advisor checks-- available only on higher support plans. region must be us-east-1
+		fmt.Println("Getting Trusted Advisor checks... (this may take a few minutes) \n")
+		checkInfos, err := getTrustedAdvisorCheckIds()
+		if err != nil {
+			fmt.Println("Failed to get Trusted Advisor check IDs:", err)
+		}
+		fmt.Println("Printing Trusted Advisor check results... \n")
+		getCheckResults(checkInfos)
+		if err != nil {
+			fmt.Println("Failed to get Trusted Advisor check results:", err)
+		}
+
 	}
 
 	// ask user if they want to run EC2 instance checks using survey
@@ -228,7 +270,34 @@ func main() {
 	}
 
 	if shouldRunEC2Checks {
-		performEC2Checks(ec2Svc)
+		cpuThresholdStr := ""
+		err := survey.AskOne(cpuThresholdPrompt, &cpuThresholdStr)
+		if err != nil {
+			fmt.Println("Error with survey:", err)
+			return
+		}
+		cpuThreshold, err := strconv.Atoi(cpuThresholdStr)
+		if err != nil {
+			fmt.Println("Error converting CPU threshold to integer:", err)
+			return
+		}
+		//fmt.Println("CPU threshold set to:", cpuThreshold)
+
+		// ask for timeframe
+		timeframeStr := ""
+		err = survey.AskOne(timeframePrompt, &timeframeStr)
+		if err != nil {
+			fmt.Println("Error with survey:", err)
+			return
+		}
+		timeframeDays, err := strconv.Atoi(timeframeStr)
+		if err != nil {
+			fmt.Println("Error converting timeframe to integer:", err)
+			return
+		}
+		timeframe := time.Duration(timeframeDays) * 24 * time.Hour
+		//fmt.Println("Timeframe set to:", timeframe)
+		performEC2Checks(ec2Svc, cpuThreshold, timeframe)
 	}
 	// ask user if they want to run s3 checks using survey
 	err = survey.AskOne(s3prompt, &shouldRunS3Checks)

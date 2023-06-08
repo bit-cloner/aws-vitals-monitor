@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -77,7 +78,7 @@ func checkSnapshot(snapshotId string, region string) bool {
 	// loop over snapshot attribute and print them
 	if len(snapshotAttributes.CreateVolumePermissions) > 0 {
 		for _, snapshot := range snapshotAttributes.CreateVolumePermissions {
-			if *snapshot.Group == "all" {
+			if snapshot.Group != nil && *snapshot.Group == "all" {
 				fmt.Println("\nA snapshot has public permission to create volume. Please investigate snapshot: ❌", snapshotId)
 				return true
 			}
@@ -185,7 +186,7 @@ func findOrphanedEBSVolumes(svc *ec2.EC2) ([]*ec2.Volume, error) {
 	return orphanedVolumes, nil
 }
 
-func performEC2Checks(svc *ec2.EC2) {
+func performEC2Checks(svc *ec2.EC2, cpuThreshold int, timeFrame time.Duration) {
 	input := &ec2.DescribeInstancesInput{}
 
 	onDemandCount := 0
@@ -220,10 +221,12 @@ func performEC2Checks(svc *ec2.EC2) {
 	}
 	// check for imdv1 instances
 	checkForIMDv1Instances(instances)
+
 	// check for underutilized instances
-	cpuThreshold := 20.0
-	timeframe := 72 * time.Hour
-	displayUnderutilizedInstances(runningInstances, cpuThreshold, timeframe)
+	floatCpuThreshold := float64(cpuThreshold)
+	//fmt.Println("cpu threshold is ", floatCpuThreshold)
+	//fmt.Println("timeframe is ", timeFrame)
+	displayUnderutilizedInstances(runningInstances, floatCpuThreshold, timeFrame)
 	// Counting Reserved instances
 	reservedInput := &ec2.DescribeReservedInstancesInput{
 		Filters: []*ec2.Filter{
@@ -326,7 +329,7 @@ func getInstanceAverageCPU(instance *ec2.Instance, timeframe time.Duration) (flo
 
 	// Check if the instance was started within the specified time frame
 	if instance.LaunchTime.After(startTime) {
-		return 0, fmt.Errorf("instance %s was started within the specified time period", *instance.InstanceId)
+		return 0, fmt.Errorf("this instance was started within the specified time period: %s", *instance.InstanceId)
 	}
 
 	input := &cloudwatch.GetMetricStatisticsInput{
@@ -372,16 +375,28 @@ func displayUnderutilizedInstances(runningInstances []*ec2.Instance, cpuThreshol
 	concurrencyLimit := 10
 	sem := make(chan bool, concurrencyLimit)
 
+	var syncMutex sync.Mutex
+	var skipCount int
+	var wg sync.WaitGroup
+
 	for _, instance := range runningInstances {
+		wg.Add(1)
 		sem <- true
 		go func(instance *ec2.Instance) {
-			defer func() { <-sem }()
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
 			averageCPU, err := getInstanceAverageCPU(instance, timeframe)
 			if err != nil {
-				if strings.Contains(err.Error(), "instance was started within the specified time period") {
-					fmt.Printf("Skipping instance %s: %s\n", *instance.InstanceId, err)
+				if strings.Contains(err.Error(), "this instance was started within the specified time period:") {
+					syncMutex.Lock()
+					skipCount++
+					syncMutex.Unlock()
 				} else {
+					syncMutex.Lock()
 					fmt.Printf("Error getting average CPU for instance %s: %s\n", *instance.InstanceId, err)
+					syncMutex.Unlock()
 				}
 				return
 			}
@@ -392,6 +407,8 @@ func displayUnderutilizedInstances(runningInstances []*ec2.Instance, cpuThreshol
 			}
 		}(instance)
 	}
+	wg.Wait() // Wait for all goroutines to finish
+	fmt.Printf("Skipped *** %d *** instances because they were started within the specified time period\n", skipCount)
 
 	for i := 0; i < cap(sem); i++ {
 		sem <- true
