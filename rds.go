@@ -21,50 +21,49 @@ func listRDSInstances(rdsClient *rds.RDS) ([]*rds.DBInstance, error) {
 }
 
 func checkRDSInstanceAttributes(dbInstances []*rds.DBInstance) {
-	fmt.Printf("\n #### Analyzing %d RDS Instances ####\n", len(dbInstances))
+	fmt.Printf("\n#### Analyzing %d RDS Instances ####\n", len(dbInstances))
 	for _, instance := range dbInstances {
-		publiclyAccessible := false
-		if instance.PubliclyAccessible != nil {
-			publiclyAccessible = *instance.PubliclyAccessible
+		fmt.Printf("\n--- Instance ID: %s ---\n", *instance.DBInstanceIdentifier)
+		hasNegativeFindings := false
+
+		// Publicly Accessible
+		if instance.PubliclyAccessible != nil && *instance.PubliclyAccessible {
+			fmt.Printf("  ❌ Publicly Accessible\n")
+			hasNegativeFindings = true
 		}
 
-		storageEncrypted := false
-		if instance.StorageEncrypted != nil {
-			storageEncrypted = *instance.StorageEncrypted
+		// Storage Encryption
+		if instance.StorageEncrypted != nil && !*instance.StorageEncrypted {
+			fmt.Printf("  ❌ Encryption Not Enabled\n")
+			hasNegativeFindings = true
 		}
 
-		iops := int64(0)
-		if instance.Iops != nil {
-			iops = *instance.Iops
+		// Disk Type
+		if instance.StorageType != nil && *instance.StorageType == "gp2" {
+			fmt.Printf("  ⚠️ Using gp2 disk type (Consider upgrading to GP3)\n")
+			hasNegativeFindings = true
 		}
 
-		multiAZ := false
-		if instance.MultiAZ != nil {
-			multiAZ = *instance.MultiAZ
-		}
-
-		if instance.BackupRetentionPeriod != nil && *instance.BackupRetentionPeriod > 0 {
-			fmt.Printf("Automated backups are enabled for DB instance: %s\n", *instance.DBInstanceIdentifier)
-			fmt.Printf("Backup Retention period is: %d Days\n", instance.BackupRetentionPeriod)
+		// MultiAZ
+		if instance.MultiAZ != nil && *instance.MultiAZ {
+			fmt.Printf("  ⚠️  MultiAZ Enabled\n")
 		} else {
-			fmt.Printf("Automated backups are NOT enabled for DB instance: %s ❓\n", *instance.DBInstanceIdentifier)
+			fmt.Printf("  ⚠️ MultiAZ Not Enabled\n")
+			hasNegativeFindings = true
 		}
 
-		if publiclyAccessible {
-			fmt.Printf("Instance ID: %s\n", *instance.DBInstanceIdentifier)
-			fmt.Printf("  Publicly Accessible: %t❌\n", publiclyAccessible)
+		// Backup Retention
+		if instance.BackupRetentionPeriod != nil && *instance.BackupRetentionPeriod > 0 {
+			fmt.Printf(" ❓ Backup Retention: %d Days\n", *instance.BackupRetentionPeriod)
+		} else {
+			fmt.Printf("  ❌ Backup Retention: Not Enabled\n")
+			hasNegativeFindings = true
 		}
-		if !storageEncrypted {
-			fmt.Printf("Instance ID: %s\n", *instance.DBInstanceIdentifier)
-			fmt.Printf("  Encryption Enabled: %t❌\n", storageEncrypted)
+
+		if !hasNegativeFindings {
+			fmt.Printf("  ✅ No negative findings\n")
 		}
-		if iops > 0 {
-			fmt.Printf("Instance ID: %s\n", *instance.DBInstanceIdentifier)
-			fmt.Printf("  Provisioned IOPS: %d❓\n", iops)
-		}
-		if !multiAZ {
-			fmt.Printf("Instance ID: %s\n", *instance.DBInstanceIdentifier)
-			fmt.Printf("  MultiAZ: %t❌\n", multiAZ)
-		}
+
+		fmt.Println("-------------------------------") // Separator for the next instance
 	}
 }

@@ -236,6 +236,8 @@ func performEC2Checks(svc *ec2.EC2, cpuThreshold int, timeFrame time.Duration) {
 			},
 		},
 	}
+	// check EC2 instances for multiple ENIs
+	checkForMultipleENIs(instances, *svc.Config.Region)
 
 	reservedInstances, err := svc.DescribeReservedInstances(reservedInput)
 	if err != nil {
@@ -243,7 +245,7 @@ func performEC2Checks(svc *ec2.EC2, cpuThreshold int, timeFrame time.Duration) {
 		return
 	}
 
-	fmt.Printf("\n Found %d purchases of reserved instances\n", len(reservedInstances.ReservedInstances))
+	fmt.Printf("\nFound %d purchases of reserved instances\n", len(reservedInstances.ReservedInstances))
 	for _, reservedInstance := range reservedInstances.ReservedInstances {
 		years := float64(*reservedInstance.Duration) / (60 * 60 * 24 * 365)
 		fmt.Printf("Instance Type: %s, Availability Zone: %s, Instance Count: %d, Duration: %.2f years\n",
@@ -316,6 +318,45 @@ func checkForIMDv1Instances(instances []*ec2.Instance) {
 		}
 	} else {
 		fmt.Println("No instances found using instance metadata version 1 (IMDv1).")
+	}
+}
+func checkForMultipleENIs(instances []*ec2.Instance, region string) {
+	fmt.Printf("\nChecking %d instances for multiple ENIs\n", len(instances))
+	multipleENIsInstances := make([]*ec2.Instance, 0)
+	sess, err := session.NewSession(&aws.Config{
+		Region: aws.String(region),
+	})
+	if err != nil {
+		fmt.Println("Failed to create session:", err)
+	}
+	svc := ec2.New(sess)
+
+	for _, instance := range instances {
+		input := &ec2.DescribeNetworkInterfacesInput{
+			Filters: []*ec2.Filter{
+				{
+					Name:   aws.String("attachment.instance-id"),
+					Values: []*string{instance.InstanceId},
+				},
+			},
+		}
+		result, err := svc.DescribeNetworkInterfaces(input)
+		if err != nil {
+			fmt.Println("Error describing network interfaces:", err)
+			continue
+		}
+		if len(result.NetworkInterfaces) > 1 {
+			multipleENIsInstances = append(multipleENIsInstances, instance)
+		}
+	}
+
+	if len(multipleENIsInstances) > 0 {
+		fmt.Printf("Found %d instances with multiple ENIs:\n", len(multipleENIsInstances))
+		for _, instance := range multipleENIsInstances {
+			fmt.Printf("- Instance ID: %s\n", *instance.InstanceId)
+		}
+	} else {
+		fmt.Println("No instances found with multiple ENIs.")
 	}
 }
 
