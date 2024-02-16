@@ -46,7 +46,7 @@ func regionFullName(regionCode string) string {
 	return regionName
 }
 
-func printAccountInfo(iamSvc *iam.IAM, stsSvc *sts.STS, region string) {
+func printAccountInfo(iamSvc *iam.IAM, stsSvc *sts.STS, region string) AccountInformation {
 	// Get caller identity
 	callerIdentityOutput, err := stsSvc.GetCallerIdentity(&sts.GetCallerIdentityInput{})
 	if err != nil {
@@ -83,4 +83,12 @@ func printAccountInfo(iamSvc *iam.IAM, stsSvc *sts.STS, region string) {
 	banner.WriteString("╚════════════════════════════════════════════════════════════════════════════════════╝\n")
 
 	fmt.Print(banner.String())
+	// fill accountinfo struct
+	accountInfo := AccountInformation{
+		AccountId:    accountID,
+		AccountAlias: accountAlias,
+		RegionCode:   region,
+		RegionName:   regionFullName,
+	}
+	return accountInfo
 }

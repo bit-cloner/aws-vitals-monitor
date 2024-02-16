@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -105,7 +106,7 @@ func main() {
 	stsSvc := sts.New(sess)
 	dynamoDBSvc := dynamodb.New(sess)
 	// Call printAccountInfo function
-	printAccountInfo(iamSvc, stsSvc, selectedRegion)
+	accountInfo := printAccountInfo(iamSvc, stsSvc, selectedRegion)
 
 	// Start of snapshot check. This can be made as a go routine
 
@@ -137,6 +138,11 @@ func main() {
 
 	if !foundPublicSnapshot {
 		fmt.Println("\nNo snapshots were found that are publicly shared: ✅")
+	}
+	// populate Snapshots struct
+	snapshotsData := Snapshots{
+		TotalAnalyzed:  counter,
+		PubliclyShared: foundPublicSnapshot,
 	}
 	groups, err := getSecurityGroups(selectedRegion)
 	if err != nil {
@@ -324,6 +330,33 @@ func main() {
 		if err != nil {
 			fmt.Println("Error with DynamoDB checks:", err)
 			return
+		}
+	}
+
+	// Ask user to display in JSON format
+	displayJSON := false
+	displayprompt := &survey.Confirm{
+		Message: "Do you want to display this information in JSON format?",
+	}
+	err = survey.AskOne(displayprompt, &displayJSON)
+	if err != nil {
+		fmt.Println("Error with survey:", err)
+	}
+
+	if displayJSON {
+		findings := Findings{
+			Snapshots: snapshotsData,
+		}
+		masterStruct := MasterStructure{
+			AccountInformation: accountInfo,
+			Findings:           findings,
+		}
+
+		jsonData, err := json.MarshalIndent(masterStruct, "", "    ")
+		if err != nil {
+			fmt.Println("Error with parsing json data:", err)
+		} else {
+			fmt.Println(string(jsonData))
 		}
 	}
 

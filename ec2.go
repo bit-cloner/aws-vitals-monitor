@@ -248,11 +248,41 @@ func performEC2Checks(svc *ec2.EC2, cpuThreshold int, timeFrame time.Duration) {
 	fmt.Printf("\nFound %d purchases of reserved instances\n", len(reservedInstances.ReservedInstances))
 	for _, reservedInstance := range reservedInstances.ReservedInstances {
 		years := float64(*reservedInstance.Duration) / (60 * 60 * 24 * 365)
-		fmt.Printf("Instance Type: %s, Availability Zone: %s, Instance Count: %d, Duration: %.2f years\n",
-			*reservedInstance.InstanceType,
-			*reservedInstance.AvailabilityZone,
-			*reservedInstance.InstanceCount,
+		// Safely dereference pointers by checking for nil
+
+		// Calculate days until expiration
+		// Calculate the number of days until the Reserved Instance expires
+		expiresInSeconds := "N/A"
+		if reservedInstance.End != nil {
+			now := time.Now()
+			if reservedInstance.End.After(now) {
+				duration := reservedInstance.End.Sub(now)
+				daysUntilExpiration := duration.Hours() / 24
+				expiresInSeconds = fmt.Sprintf("%.0f days", daysUntilExpiration)
+			} else {
+				expiresInSeconds = "Expired"
+			}
+		}
+		instanceType := "N/A" // Default value in case of nil
+		if reservedInstance.InstanceType != nil {
+			instanceType = *reservedInstance.InstanceType
+		}
+
+		availabilityZone := "N/A" // Default value in case of nil
+		if reservedInstance.AvailabilityZone != nil {
+			availabilityZone = *reservedInstance.AvailabilityZone
+		}
+
+		instanceCount := -1 // Default value in case of nil
+		if reservedInstance.InstanceCount != nil {
+			instanceCount = int(*reservedInstance.InstanceCount)
+		}
+		fmt.Printf("Instance Type: %s, Availability Zone: %s, Instance Count: %d, Duration: %.2f years , Expires in: %s\n",
+			instanceType,
+			availabilityZone,
+			instanceCount,
 			years,
+			expiresInSeconds,
 		)
 	}
 	// Calculate On-Demand and Spot instances percentages

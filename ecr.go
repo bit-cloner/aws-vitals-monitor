@@ -40,7 +40,7 @@ func checkRepositoryPermissions(repositoryNames []string, sess *session.Session)
 		policyOutput, err := svc.GetRepositoryPolicy(policyInput)
 		if err != nil {
 			if aerr, ok := err.(awserr.Error); ok && aerr.Code() == "RepositoryPolicyNotFoundException" {
-				fmt.Printf("\n Repository policy does not exist for %s, skipping\n", repositoryName)
+				//fmt.Printf("\n Repository policy does not exist for %s, skipping\n", repositoryName)
 				continue
 			} else {
 				fmt.Println("Error getting repository policy:", err)
