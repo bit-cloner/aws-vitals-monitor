@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/rds"
@@ -66,4 +67,12 @@ func checkRDSInstanceAttributes(dbInstances []*rds.DBInstance) {
 
 		fmt.Println("-------------------------------") // Separator for the next instance
 	}
+}
+
+// printStorageUsageBar generates a visual representation of storage usage
+func printStorageUsageBar(percentageUsed int, allocatedStorage int64) {
+	const barLength = 20 // Total length of the bar, adjust as needed
+	usedLength := barLength * percentageUsed / 100
+	bar := strings.Repeat("█", usedLength) + strings.Repeat("░", barLength-usedLength)
+	fmt.Printf("  Storage Usage: [%s] %d%% of %d GB\n", bar, percentageUsed, allocatedStorage)
 }

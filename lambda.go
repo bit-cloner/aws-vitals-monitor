@@ -3,6 +3,10 @@ package main
 import (
 	"fmt"
 
+	"encoding/json"
+	"io/ioutil"
+	"net/http"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/lambda"
 )
@@ -46,19 +50,10 @@ func outdatedFunctionRuntimeCheck(lambdaClient *lambda.Lambda, functionArn strin
 	function := result.Configuration
 
 	// Check for outdated runtime environments
-	outdatedRuntimes := []string{
-		"python3.6",
-		"python2.7",
-		"dotnetcore2.1",
-		"ruby2.5",
-		"nodejs10.x",
-		"nodejs8.10",
-		"nodejs4.3",
-		"nodejs6.10",
-		"dotnetcore1.0",
-		"dotnetcore2.0",
-		"nodejs4.3-edge",
-		"nodejs",
+	outdatedRuntimes, err := GetDeprecatedRuntimes()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
 	}
 
 	for _, outdatedRuntime := range outdatedRuntimes {
@@ -66,4 +61,36 @@ func outdatedFunctionRuntimeCheck(lambdaClient *lambda.Lambda, functionArn strin
 			fmt.Printf("\nOutdated runtime detected for function %s: %s\n", *function.FunctionName, *function.Runtime)
 		}
 	}
+}
+
+// DeprecatedRuntimesResponse struct to map the JSON response
+type DeprecatedRuntimesResponse struct {
+	DeprecatedRuntimes []string `json:"deprecated_runtimes"`
+}
+
+// GetDeprecatedRuntimes fetches a list of deprecated runtimes from the specified URL
+func GetDeprecatedRuntimes() ([]string, error) {
+	url := "https://lambda-deprecated-runtimes-atzlvbq4rq-uc.a.run.app"
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching deprecated runtimes: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("received non-200 response status: %d", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("error reading response body: %v", err)
+	}
+
+	var response DeprecatedRuntimesResponse
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshaling response: %v", err)
+	}
+
+	return response.DeprecatedRuntimes, nil
 }

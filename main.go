@@ -255,12 +255,12 @@ func main() {
 	}
 	if shouldRunTrustedAdvisorChecks {
 		// get Trusted Advisor checks-- available only on higher support plans. region must be us-east-1
-		fmt.Println("Getting Trusted Advisor checks... (this may take a few minutes) \n")
+		fmt.Println("Getting Trusted Advisor checks... (this may take a few minutes)")
 		checkInfos, err := getTrustedAdvisorCheckIds()
 		if err != nil {
 			fmt.Println("Failed to get Trusted Advisor check IDs:", err)
 		}
-		fmt.Println("Printing Trusted Advisor check results... \n")
+		fmt.Println("Printing Trusted Advisor check results... ")
 		getCheckResults(checkInfos)
 		if err != nil {
 			fmt.Println("Failed to get Trusted Advisor check results:", err)
