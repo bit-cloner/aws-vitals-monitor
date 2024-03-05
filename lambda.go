@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/lambda"
+	"github.com/aws/aws-sdk-go/service/servicequotas"
 )
 
 func listLambdaFunctions(lambdaClient *lambda.Lambda) ([]*lambda.FunctionConfiguration, error) {
@@ -93,4 +94,24 @@ func GetDeprecatedRuntimes() ([]string, error) {
 	}
 
 	return response.DeprecatedRuntimes, nil
+}
+func calculateLambdaStorage(functionsConfigs []*lambda.FunctionConfiguration, quotasClient *servicequotas.ServiceQuotas) error {
+	quotaResp, err := quotasClient.GetServiceQuota(&servicequotas.GetServiceQuotaInput{
+		QuotaCode:   aws.String("L-2ACBD22F"),
+		ServiceCode: aws.String("lambda"),
+	})
+	if err != nil {
+		return fmt.Errorf("error getting service quota: %v", err)
+	}
+	quotaGB := *quotaResp.Quota.Value
+	var totalSizeBytes int64
+	for _, functionConfig := range functionsConfigs {
+		totalSizeBytes += *functionConfig.CodeSize
+	}
+	totalSizeGB := float64(totalSizeBytes) / 1024 / 1024 / 1024
+	fmt.Printf("Total size of Lambda functions: %.2f GB\n", totalSizeGB)
+	fmt.Printf("Lambda storage quota: %.2f GB\n", quotaGB)
+	fmt.Printf("Percentage used: %.2f%%\n", (totalSizeGB/quotaGB)*100)
+
+	return nil
 }

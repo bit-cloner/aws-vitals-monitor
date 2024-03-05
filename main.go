@@ -18,10 +18,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/servicequotas"
 	"github.com/aws/aws-sdk-go/service/sts"
 )
 
 func main() {
+
 	// Create a list of regions
 	regionNames := []string{
 		"us-east-1",
@@ -68,7 +70,7 @@ func main() {
 		Message: "Do you want to run EC2 checks?",
 	}
 	cpuThresholdPrompt := &survey.Select{
-		Message: "Enter a CPU threshold (default 20%):",
+		Message: "Identify Underutilized EC2s. Enter a CPU threshold (default 20%):",
 		Options: []string{"20", "30", "40", "50"},
 		Default: "20",
 	}
@@ -105,6 +107,7 @@ func main() {
 	iamSvc := iam.New(sess)
 	stsSvc := sts.New(sess)
 	dynamoDBSvc := dynamodb.New(sess)
+	serviceQuotaClient := servicequotas.New(sess)
 	// Call printAccountInfo function
 	accountInfo := printAccountInfo(iamSvc, stsSvc, selectedRegion)
 
@@ -228,15 +231,22 @@ func main() {
 	} else {
 		fmt.Println("\nNo EBS volumes are orphaned: ✅")
 	}
-
+	// lambda checks
 	//get lambda functions
 	lambdaFunctions, err := listLambdaFunctions(lambdaClient)
 	if err != nil {
 		fmt.Println("Failed to get lambda functions:", err)
 	}
+	// check for outdated runtimes
 	fmt.Printf("\n #### Analyzing %d Lambda functions for outdated runtimes ####", len(lambdaFunctions))
 	for _, lambdaFunction := range lambdaFunctions {
 		outdatedFunctionRuntimeCheck(lambdaClient, *lambdaFunction.FunctionArn)
+	}
+	// Check Lambda storage usage vs quota
+	fmt.Printf("\n #### Getting Lambda storage usage###\n")
+	err = calculateLambdaStorage(lambdaFunctions, serviceQuotaClient)
+	if err != nil {
+		fmt.Println("Error:", err)
 	}
 
 	// RDS checks
